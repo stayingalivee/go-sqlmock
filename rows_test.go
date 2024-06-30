@@ -4,7 +4,11 @@ import (
 	"bytes"
 	"database/sql"
 	"database/sql/driver"
+	"encoding/csv"
+	"encoding/json"
 	"fmt"
+	"reflect"
+	"strings"
 	"testing"
 )
 
@@ -463,6 +467,57 @@ func TestCSVRowParser(t *testing.T) {
 	if col3 != nil {
 		t.Fatalf("expected col3 to be nil, but got [%T]:%+v", col3, col3)
 	}
+}
+
+func TestCSVRowParserFromCsvParser(t *testing.T) {
+	t.Parallel()
+
+	line := "a|NULL|[\"a\",\"b\"]"
+
+	r := strings.NewReader(line)
+	csvReader := csv.NewReader(r)
+	csvReader.Comma = '|'
+	csvReader.LazyQuotes = true
+
+	rs := NewRows([]string{"col1", "col2", "col3"}).FromCSVReader(csvReader)
+	db, mock, err := New()
+	if err != nil {
+		t.Fatalf("an error '%s' was not expected when opening a stub database connection", err)
+	}
+	defer db.Close()
+
+	mock.ExpectQuery("SELECT").WillReturnRows(rs)
+
+	rw, err := db.Query("SELECT")
+	if err != nil {
+		t.Fatalf("unexpected error: %s", err)
+	}
+	defer rw.Close()
+	var col1 string
+	var col2 []byte
+	var col3 string
+	var col3Json []string
+
+	rw.Next()
+	if err = rw.Scan(&col1, &col2, &col3); err != nil {
+		t.Fatalf("unexpected error: %s", err)
+	}
+	if col1 != "a" {
+		t.Fatalf("expected col1 to be 'a', but got [%T]:%+v", col1, col1)
+	}
+	if col2 != nil {
+		t.Fatalf("expected col2 to be nil, but got [%T]:%+v", col2, col2)
+	}
+
+	err = json.Unmarshal([]byte(col3), &col3Json)
+	if err != nil {
+		t.Fatalf("expected valid json, but got [%T]:%+v", col3, col3)
+	}
+
+	if !reflect.DeepEqual(col3Json, []string{"a", "b"}) {
+		t.Fatalf("expected col3Json to be [\"a\", \"b\"], but got [%T]:%+v", col3Json, col3Json)
+	}
+
 }
 
 func TestCSVParserInvalidInput(t *testing.T) {

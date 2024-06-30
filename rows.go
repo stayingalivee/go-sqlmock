@@ -224,3 +224,26 @@ func (r *Rows) FromCSVString(s string) *Rows {
 	}
 	return r
 }
+
+// FromCSVReader builds rows from csv reader to allow customized csv.
+// return the same instance to perform subsequent actions.
+// Note that the number of values must match the number
+// of columns
+func (r *Rows) FromCSVReader(csvReader *csv.Reader) *Rows {
+	for {
+		res, err := csvReader.Read()
+		if err != nil {
+			if errors.Is(err, io.EOF) {
+				break
+			}
+			panic(fmt.Sprintf("Parsing CSV string failed: %s", err.Error()))
+		}
+
+		row := make([]driver.Value, len(r.cols))
+		for i, v := range res {
+			row[i] = CSVColumnParser(strings.TrimSpace(v))
+		}
+		r.rows = append(r.rows, row)
+	}
+	return r
+}
